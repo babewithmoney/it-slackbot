@@ -1,0 +1,14 @@
+fastapi
+slack-sdk
+mysql-connector-python
+sqlalchemy
+python-dotenv
+uvicorn
+openai
+gspread 
+google-auth 
+fastapi-utils
+requests
+python-multipart
+pymysql
+httpx==0.25.0
