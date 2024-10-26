@@ -19,3 +19,6 @@ torchaudio
 torch 
 spacy 
 sentencepiece
+einops
+bitsandbytes
+protobuf

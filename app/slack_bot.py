@@ -205,8 +205,6 @@ async def process_task_message(event: dict, db: Session):
                     text=(
                         f"Campaign setup complete! 🎉\n\n"
                         f"Crafted message: {crafted_message}\n\n"
-                        f"Google Sheet: {google_sheet_link}\n\n"
-                        f"Notifications sent: {notification_stats['success']} successful, {notification_stats['failed']} failed\n\n"
                         f"The campaign is now in progress."
                     )
                 )
@@ -390,7 +388,7 @@ async def handle_dm_response(event: dict, db: Session):
                         campaign_user.response_time = datetime.utcnow()
                         
                         # Ask for confirmation
-                        confirmation_message = message_processor.get_confirmation_message(decision)
+                        confirmation_message = message_processor.get_confirmation_message(decision, confidence)
                         slack_client.chat_postMessage(
                             channel=channel_id,
                             text=confirmation_message
@@ -418,6 +416,8 @@ async def handle_dm_response(event: dict, db: Session):
                                 channel=channel_id,
                                 text="Thank you for confirming your response. Your decision has been recorded."
                             )
+                            # Check if campaign is complete
+                            await notification_handler.check_campaign_completion(campaign_user.campaign_id, db)
                             
                         elif user_message.lower().strip() == 'no':
                             # Reset response and ask again
