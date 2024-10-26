@@ -16,8 +16,9 @@ import csv
 import io
 import json
 import requests
+import time
 import asyncio
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any,Tuple
 import httpx 
 
 router = APIRouter()
@@ -25,45 +26,7 @@ slack_client = WebClient(token=os.getenv("SLACK_BOT_TOKEN"))
 user_verification = UserVerification(os.getenv("SLACK_BOT_TOKEN"))
 notification_handler = NotificationHandler(os.getenv("SLACK_BOT_TOKEN"))
 sheet_manager = SheetManager(os.getenv("GOOGLE_SHEETS_CREDENTIALS"))
-message_processor = MessageProcessor(os.getenv("OPENAI_API_KEY"))
-
-def get_crafted_message_from_chatgpt(prompt: str) -> str:
-    """Get a crafted message from ChatGPT."""
-    try:
-        api_url = "https://api.openai.com/v1/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {os.getenv('OPENAI_API_KEY')}",
-            "Content-Type": "application/json"
-        }
-        
-        data = {
-            "model": "gpt-3.5-turbo",
-            "messages": [
-                {
-                    "role": "system",
-                    "content": "You are an assistant that helps craft polite and concise messages for license renewal communications."
-                },
-                {
-                    "role": "user",
-                    "content": f"Create a polite and concise version of this message while keeping the core information: {prompt}"
-                }
-            ],
-            "temperature": 0.7,
-            "max_tokens": 500
-        }
-
-        response = requests.post(api_url, headers=headers, json=data, timeout=10)
-        response.raise_for_status()
-        
-        response_json = response.json()
-        if "choices" in response_json and len(response_json["choices"]) > 0:
-            return response_json["choices"][0]["message"]["content"].strip()
-        else:
-            raise ValueError("No message content in ChatGPT response")
-            
-    except Exception as e:
-        print(f"Error in get_crafted_message_from_chatgpt: {str(e)}")
-        return "Hi, we're reviewing our Figma licenses. Since you haven't used it in 90+ days, could you let us know if you still need access? Releasing unused licenses helps us optimize costs. Please confirm your decision."
+message_processor = MessageProcessor()
 
 async def safe_parse_request(request: Request) -> Optional[Dict[Any, Any]]:
     """Safely parse request body with timeout"""
@@ -132,7 +95,8 @@ async def process_file_upload(event: dict, db: Session):
                             "CSV uploaded successfully! ✅\n"
                             "Please provide the prompt and Google Sheets link in the following format:\n"
                             "task: [Your task description]\n"
-                            "google sheet link: [Your Google Sheets URL]"
+                            "google sheet link: [Your Google Sheets URL]\n"
+                            "Please ensure I have edit access to the Google Sheet. You can share it with this email: license-review-bot@slack-bot-439716.iam.gserviceaccount.com"
                         )
                     )
                 else:
@@ -219,7 +183,12 @@ async def process_task_message(event: dict, db: Session):
                     return
 
                 # Update campaign
-                crafted_message = get_crafted_message_from_chatgpt(task)
+                crafted_message,error = message_processor.craft_message(task)
+                if error:
+                    slack_client.chat_postMessage(
+                        channel=channel_id,
+                        text=f"Warning: Could not get crafted message ({error}). Proceeding with original message."
+                    )
                 campaign.google_sheet_link = google_sheet_link
                 campaign.prompt = task
                 campaign.crafted_msg = crafted_message
@@ -351,7 +320,7 @@ async def setup_campaign(user_id: str, response_url: str, db: Session):
                 channel=dm_channel_id,
                 text=(
                     "Let's set up your license review campaign. "
-                    "Please upload a CSV with email addresses and share a Google Sheets link for results tracking."
+                    "Please upload a CSV with email addresses. The csv should contain a column called 'email' Once you upload your csv file please wait for the step next..."
                 )
             )
 
@@ -421,11 +390,7 @@ async def handle_dm_response(event: dict, db: Session):
                         campaign_user.response_time = datetime.utcnow()
                         
                         # Ask for confirmation
-                        confirmation_message = (
-                            f"Based on your response, I understand that you *{'want' if decision == 'yes' else 'do not want'}* "
-                            "to keep your license. Is this correct?\n\n"
-                            "Please reply with 'yes' to confirm or 'no' to clarify your response."
-                        )
+                        confirmation_message = message_processor.get_confirmation_message(decision)
                         slack_client.chat_postMessage(
                             channel=channel_id,
                             text=confirmation_message

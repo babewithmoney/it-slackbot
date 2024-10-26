@@ -21,7 +21,7 @@ class UserVerification:
                 title = profile.get("title", "").lower()
                 
                 # List of keywords that indicate IT role
-                it_keywords = ["it", "information technology", "systems", "tech", "technical"]
+                it_keywords = ["it-admin", "information technology", "systems", "tech", "technical"]
                 
                 # Check if any IT keyword is in the title
                 is_it = any(keyword in title for keyword in it_keywords)

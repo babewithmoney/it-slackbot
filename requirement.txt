@@ -12,3 +12,10 @@ requests
 python-multipart
 pymysql
 httpx==0.25.0
+cryptography
+transformers 
+torchvision 
+torchaudio
+torch 
+spacy 
+sentencepiece
